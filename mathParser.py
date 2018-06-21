@@ -62,14 +62,14 @@ def infixToPostfix(tokens):
     return postfix
 
 
-def evaluatePostfix(postfix, variableValues, variableLocation, methodVariables):
+def evaluatePostfix(postfix, variableList, variableLocation, methodVariables):
     """
     Evaluates the postfix math expression. Variables have their values read and loaded into registers before executing
     the operation. If variables are in the methodVariables list, we make use of the stack frame pointer "S2" to fetch
     their memory location.For immediate values, since multiplications and divisions may only be done with registers, we
     also load them into registers for ease of automation.
     :param postfix: str list, our postfix mathematical expression to evaluate.
-    :param variableValues: dict, each variable has a mapped value.
+    :param variableList: str list, list of all the variables in the method thus far
     :param variableLocation: dict, each variable has a mapped memory location (e.g. 0x40000000).
     :param methodVariables: dict, variables passed into the method as arguments.
     :return:
@@ -93,16 +93,16 @@ def evaluatePostfix(postfix, variableValues, variableLocation, methodVariables):
             # execute the given operation.
             operand1, operand2 = stack.pop(), stack.pop()
 
-            if operand1 in variableValues:
+            if operand1 in variableList:
                 # The operand is in the list of local variables, so we read the value from memory
-                print("MEMR [4] #" + variableLocation[operand1] + " $" + REGISTERS[sourceRegister])
+                print("MEMR [4] #" + str(variableLocation[operand1]) + " $" + REGISTERS[sourceRegister])
                 operand1 = REGISTERS[sourceRegister]
 
             elif operand1 in methodVariables:
                 # The operand is in the list of arguments passed into the method. We consult the methodVariables list
                 # to determine the appropriate offset from the stack pointer register S2.
                 print("MOV $A2 $S2")
-                print("ADD #" + str(int(methodVariables[operand1]) * 4) + " $A2")
+                print("ADD #" + str(int(methodVariables[operand1][1]) * 4) + " $A2")
                 print("MEMR [4] $A2 $" + REGISTERS[sourceRegister])
                 operand1 = REGISTERS[sourceRegister]
 
@@ -119,17 +119,17 @@ def evaluatePostfix(postfix, variableValues, variableLocation, methodVariables):
                 except ValueError as e:
                     raise ValueError("Invalid operand")
 
-            if operand2 in variableValues:
+            if operand2 in variableList:
                 # The operand is in the list of local variables, so we read the value from memory
-                print("MEMR [4] #" + variableLocation[operand2] + " $" + REGISTERS[destRegister])
+                print("MEMR [4] #" + str(variableLocation[operand2]) + " $" + REGISTERS[destRegister])
                 operand2 = REGISTERS[destRegister]
 
             elif operand2 in methodVariables:
                 # The operand is in the list of arguments passed into the method. We consult the methodVariables list
                 # to determine the appropriate offset from the stack pointer register S2.
-                print("MOV $A2 $S2")
-                print("ADD #" + str(int(methodVariables[operand2]) * 4) + " $A2")
-                print("MEMR [4] $A2 $" + REGISTERS[destRegister])
+                print("MOV $B2 $S2")
+                print("ADD #" + str(int(methodVariables[operand2][1]) * 4) + " $B2")
+                print("MEMR [4] $B2 $" + REGISTERS[destRegister])
                 operand2 = REGISTERS[destRegister]
 
             elif operand2 in REGISTER_NAMES:
@@ -186,3 +186,13 @@ def evaluatePostfix(postfix, variableValues, variableLocation, methodVariables):
         raise ValueError("invalid expression.")
 
     # our result is then "saved" into register A. The assignment can now be completed.
+    result = stack.pop()
+
+    if result in REGISTER_NAMES:
+        pass
+    else:
+        try:
+            isinstance(int(result), int)
+            print("MOV #" + str(result) + " $A")
+        except ValueError as e:
+            raise ValueError("Invalid mathematical expression")

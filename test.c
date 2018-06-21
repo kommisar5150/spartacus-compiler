@@ -1,6 +1,9 @@
-int main ( ) {
-    int a ;
+int add ( int a , int b ) {
     a = 3 + 5 ;
-    int b = a ;
-    int c = b + a + 10 ;
+    b = a + 4 ;
+}
+int main ( ) {
+    int a = 5 ;
+    int b = 3 ;
+    add ( a , b ) ;
 }
