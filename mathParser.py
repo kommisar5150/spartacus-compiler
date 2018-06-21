@@ -62,7 +62,7 @@ def infixToPostfix(tokens):
     return postfix
 
 
-def evaluatePostfix(postfix, variableList, variableLocation, methodVariables):
+def evaluatePostfix(postfix, variableList, variableLocation, methodVariables, output):
     """
     Evaluates the postfix math expression. Variables have their values read and loaded into registers before executing
     the operation. If variables are in the methodVariables list, we make use of the stack frame pointer "S2" to fetch
@@ -72,6 +72,7 @@ def evaluatePostfix(postfix, variableList, variableLocation, methodVariables):
     :param variableList: str list, list of all the variables in the method thus far
     :param variableLocation: dict, each variable has a mapped memory location (e.g. 0x40000000).
     :param methodVariables: dict, variables passed into the method as arguments.
+    :param output: file, our output file we write to.
     :return:
     """
 
@@ -95,15 +96,15 @@ def evaluatePostfix(postfix, variableList, variableLocation, methodVariables):
 
             if operand1 in variableList:
                 # The operand is in the list of local variables, so we read the value from memory
-                print("MEMR [4] #" + str(variableLocation[operand1]) + " $" + REGISTERS[sourceRegister])
+                output.write("MEMR [4] #" + str(variableLocation[operand1]) + " $" + REGISTERS[sourceRegister] + "\n")
                 operand1 = REGISTERS[sourceRegister]
 
             elif operand1 in methodVariables:
                 # The operand is in the list of arguments passed into the method. We consult the methodVariables list
                 # to determine the appropriate offset from the stack pointer register S2.
-                print("MOV $A2 $S2")
-                print("ADD #" + str(int(methodVariables[operand1][1]) * 4) + " $A2")
-                print("MEMR [4] $A2 $" + REGISTERS[sourceRegister])
+                output.write("MOV $A2 $S2\n")
+                output.write("ADD #" + str(int(methodVariables[operand1][1]) * 4) + " $A2\n")
+                output.write("MEMR [4] $A2 $" + REGISTERS[sourceRegister] + "\n")
                 operand1 = REGISTERS[sourceRegister]
 
             elif operand1 in REGISTER_NAMES:
@@ -121,15 +122,15 @@ def evaluatePostfix(postfix, variableList, variableLocation, methodVariables):
 
             if operand2 in variableList:
                 # The operand is in the list of local variables, so we read the value from memory
-                print("MEMR [4] #" + str(variableLocation[operand2]) + " $" + REGISTERS[destRegister])
+                output.write("MEMR [4] #" + str(variableLocation[operand2]) + " $" + REGISTERS[destRegister] + "\n")
                 operand2 = REGISTERS[destRegister]
 
             elif operand2 in methodVariables:
                 # The operand is in the list of arguments passed into the method. We consult the methodVariables list
                 # to determine the appropriate offset from the stack pointer register S2.
-                print("MOV $B2 $S2")
-                print("ADD #" + str(int(methodVariables[operand2][1]) * 4) + " $B2")
-                print("MEMR [4] $B2 $" + REGISTERS[destRegister])
+                output.write("MOV $B2 $S2\n")
+                output.write("ADD #" + str(int(methodVariables[operand2][1]) * 4) + " $B2\n")
+                output.write("MEMR [4] $B2 $" + REGISTERS[destRegister] + "\n")
                 operand2 = REGISTERS[destRegister]
 
             elif operand2 in REGISTER_NAMES:
@@ -159,11 +160,11 @@ def evaluatePostfix(postfix, variableList, variableLocation, methodVariables):
                     # only one of the operands was an immediate value. We determine which one is the immediate value,
                     # as the correct instruction output depends on it.
                     if immFlag == 1:
-                        print("MOV #" + str(int(operand1)) + " $" + REGISTERS[sourceRegister])
+                        output.write("MOV #" + str(int(operand1)) + " $" + REGISTERS[sourceRegister] + "\n")
                         operand1 = REGISTERS[sourceRegister]
 
                     elif immFlag == 2:
-                        print("MOV #" + str(int(operand2)) + " $" + REGISTERS[destRegister])
+                        output.write("MOV #" + str(int(operand2)) + " $" + REGISTERS[destRegister] + "\n")
                         operand2 = REGISTERS[destRegister]
 
                 else:
@@ -172,7 +173,7 @@ def evaluatePostfix(postfix, variableList, variableLocation, methodVariables):
                     sourceRegister += 1
                     destRegister += 1
 
-                print(INSTRUCTIONS[element] + " $" + str(operand1) + " $" + str(operand2))
+                    output.write(INSTRUCTIONS[element] + " $" + str(operand1) + " $" + str(operand2) + "\n")
                 stack.append(operand2)
 
             immediateCount = 0
@@ -193,6 +194,6 @@ def evaluatePostfix(postfix, variableList, variableLocation, methodVariables):
     else:
         try:
             isinstance(int(result), int)
-            print("MOV #" + str(result) + " $A")
+            output.write("MOV #" + str(result) + " $A\n")
         except ValueError as e:
             raise ValueError("Invalid mathematical expression")

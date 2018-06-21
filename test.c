@@ -3,7 +3,7 @@ int add ( int a , int b ) {
     b = a + 4 ;
 }
 int main ( ) {
-    int a = 5 ;
-    int b = 3 ;
-    add ( a , b ) ;
+    int c = 5 ;
+    int d = 3 ;
+    add ( c , d ) ;
 }

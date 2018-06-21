@@ -20,6 +20,7 @@ class CompilerTest:
     varLocation = {}
     methodList = {}
     methodVars = {}
+    currentMethod = ""
     argCount = 0
     currentType = ""
     currentVariable = ""
@@ -28,33 +29,24 @@ class CompilerTest:
     def parseText(self, text):
 
         file = open(text, mode="r")
-        line = file.readlines()
+        lines = file.readlines()
         output = open("output.txt", mode="w")
-        for x in line:
+        for x in lines:
             self.readLine(x, output)
 
     def readLine(self, line, output):
-
-        self.parseMethodHeader(line)
-
-    def parseMethodHeader(self, line):
 
         line = line.split()
 
         for char in line:
 
             if self.state == 0:
-                self.varList.clear()
-                self.varLocation.clear()
-                if char in ACCEPTED_TYPES:
-                    self.currentType = char
-                    self.state = 1
-                else:
-                    raise ValueError("incorrect data return type for method declaration.")
+                self.state0(char, output)
 
             elif self.state == 1:
-                self.methodList[char] = self.currentType
-                print(char + ":")
+                self.methodList[char] = {"retType": self.currentType}
+                self.currentMethod = char
+                output.write(char + ":\n")
                 self.state = 2
 
             elif self.state == 2:
@@ -73,7 +65,10 @@ class CompilerTest:
                     raise ValueError("incorrect data type for argument.")
 
             elif self.state == 4:
-                self.methodVars[char] = self.currentType, self.argCount
+                # method list dict will have, at the index of the specified method,
+                # a list of all variables passed in as arguments (as a nested dict), which in turn
+                # holds a tuple of its data type and order of appearance in the function call.
+                self.methodList[self.currentMethod][char] = (self.currentType, self.argCount)
                 self.argCount += 1
                 self.state = 5
 
@@ -86,11 +81,14 @@ class CompilerTest:
                     raise ValueError("Incorrect syntax.")
 
             elif self.state == 6:
+                print(self.argCount)
+                self.methodList[self.currentMethod]["totalVars"] = self.argCount
                 if char == "{":
                     self.state = 7
+                    self.varList.clear()
                     if self.argCount > 0:
-                        print("MOV $S2 $S")
-                        print("SUB #" + str(self.argCount * 4) + " $S2")
+                        output.write("MOV $S2 $S\n")
+                        output.write("SUB #" + str(self.argCount * 4 + 4) + " $S2\n")
                 else:
                     raise ValueError("Incorrect syntax.")
 
@@ -106,10 +104,10 @@ class CompilerTest:
                 elif char in self.methodList:
                     self.currentVariable = char
                     self.state = 11
-                elif char in self.methodVars:
+                elif char in self.methodList[self.currentMethod]:
                     self.currentVariable = char
-                    print("MOV $A2 $S2")
-                    print("ADD #" + str(self.methodVars[char][1] * 4) + " $A2")
+                    output.write("MOV $A2 $S2\n")
+                    output.write("ADD #" + str(self.methodList[self.currentMethod][char][1] * 4 + 4) + " $A2\n")
                     self.state = 9
                 elif char == "}":
                     self.state = 0
@@ -133,25 +131,29 @@ class CompilerTest:
                 if char == ";":
                     if self.argCount == 1:
                         if self.mathFormula in self.varList:
-                            print("MEMR [4] #" + str(self.varLocation[self.mathFormula]) + " $A")
-                        elif self.mathFormula in self.methodVars:
-                            print("MOV $B2 $S2")
-                            print("ADD #" + str(self.methodVars[self.mathFormula][1] * 4) + " $B2")
-                            print("MEMR [4] $B2 $A")
+                            output.write("MEMR [4] #" + str(self.varLocation[self.mathFormula]) + " $A\n")
+                        elif self.mathFormula in self.methodList[self.currentMethod]:
+                            output.write("MOV $B2 $S2\n")
+                            output.write("ADD #" + str(self.methodList[self.currentMethod][self.mathFormula][1]*4+4)
+                                                                                                         + " $B2\n")
+                            output.write("MEMR [4] $B2 $A\n")
                         else:
-                            print("MOV #" + self.mathFormula + " $A")
-                        if self.currentVariable in self.methodVars:
-                            print("MEMW [4] $A $A2")
+                            output.write("MOV #" + self.mathFormula + " $A\n")
+                        if self.currentVariable in self.methodList[self.currentMethod]:
+                            output.write("MEMW [4] $A $A2\n")
                         else:
-                            print("MEMW [4] $A #" + str(self.varLocation[self.currentVariable]))
+                            output.write("MEMW [4] $A #" + str(self.varLocation[self.currentVariable]) + "\n")
                     else:
                         tokens = tokenize(self.mathFormula)
                         postfix = infixToPostfix(tokens)
-                        evaluatePostfix(postfix, self.varList, self.varLocation, self.methodVars)
-                        if self.currentVariable in self.methodVars:
-                            print("MEMW [4] $A $A2")
+                        postfix = infixToPostfix(tokens)
+                        evaluatePostfix(postfix, self.varList, self.varLocation,
+                                        self.methodList[self.currentMethod], output)
+
+                        if self.currentVariable in self.methodList[self.currentMethod]:
+                            output.write("MEMW [4] $A $A2\n")
                         else:
-                            print("MEMW [4] $A #" + str(self.varLocation[self.currentVariable]))
+                            output.write("MEMW [4] $A #" + str(self.varLocation[self.currentVariable]) + "\n")
 
                     self.state = 7
                 else:
@@ -159,6 +161,7 @@ class CompilerTest:
                     self.argCount += 1
 
             elif self.state == 11:
+                self.argCount = 0
                 if char == "(":
                     self.state = 12
                 else:
@@ -166,13 +169,15 @@ class CompilerTest:
 
             elif self.state == 12:
                 if char in self.varList:
-                    print("PUSH #" + str(self.varLocation[char]))
+                    output.write("PUSH #" + str(self.varLocation[char]) + "\n")
                     self.state = 13
-                elif char in self.methodVars:
-                    print("MOV $A2 $S2")
-                    print("ADD #" + str(self.methodVars[char][1] * 4) + " $A2")
-                    print("PUSH $A")
-                    self.state =13
+                    self.argCount += 1
+                elif char in self.methodList[self.currentMethod]:
+                    output.write("MOV $A2 $S2")
+                    output.write("ADD #" + str(self.methodList[self.currentMethod][char][1] * 4 + 4) + " $A2\n")
+                    output.write("PUSH $A\n")
+                    self.state = 13
+                    self.argCount += 1
                 elif char == ")":
                     self.state = 15
 
@@ -184,15 +189,30 @@ class CompilerTest:
 
             elif self.state == 14:
                 if char in self.varList:
-                    print("PUSH #" + str(self.varLocation[char]))
+                    output.write("PUSH #" + str(self.varLocation[char]) + "\n")
                     self.state = 13
-                elif char in self.methodVars:
-                    print("MOV $A2 $S2")
-                    print("ADD #" + str(self.methodVars[char][1] * 4) + " $A2")
-                    print("PUSH $A")
+                    self.argCount += 1
+                elif char in self.methodList[self.currentMethod]:
+                    output.write("MOV $A2 $S2\n")
+                    output.write("ADD #" + str(self.methodVars[self.currentMethod][char][1] * 4 + 4) + " $A2\n")
+                    output.write("PUSH $A\n")
+                    self.argCount += 1
                     self.state = 13
 
             elif self.state == 15:
                 if char == ";":
-                    print("CALL " + self.currentVariable)
-                    self.state = 7
+                    if self.argCount == self.methodList[self.currentVariable]["totalVars"]:
+                        output.write("CALL " + self.currentVariable + "\n")
+                        self.state = 7
+                    else:
+                        raise ValueError("Arguments don't match function parameters.")
+
+    def state0(self, char, output):
+        if self.state == 0:
+            self.varList.clear()
+            self.varLocation.clear()
+            if char in ACCEPTED_TYPES:
+                self.currentType = char
+                self.state = 1
+            else:
+                raise ValueError("incorrect data return type for method declaration.")
