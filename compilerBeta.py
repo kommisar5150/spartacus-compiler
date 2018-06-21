@@ -1,5 +1,8 @@
 #!/usr/bin/env python
 
+# TODO: if statements
+# TODO: while loops
+
 from constants import ACCEPTED_TYPES
 
 from mathParser import tokenize, \
@@ -289,8 +292,9 @@ class CompilerTest:
     def state10(self, char, output):
         """
         This is the state which handles parsing of math expressions for variable assignment.
-        :param char: token from line being read. Once we're done, we jump back to state 7. However, if the first
-        operand is a function call, we jump to state 11.
+        Once we're done, we jump back to state 7. However, if the first operand is a function call,
+        we jump to state 11.
+        :param char: token from line being read.
         :param output: output file to write to.
         :return:
         """
@@ -368,6 +372,13 @@ class CompilerTest:
             self.argCount += 1
 
     def state11(self, char, output):
+        """
+        This state simply checks that the function call is followed by an opening parentheses. We then jump to state 12.
+        :param char: token from line being read.
+        :param output: output file to write to.
+        :return:
+        """
+
         self.argCount = 0
         if char == "(":
             self.state = 12
@@ -375,31 +386,66 @@ class CompilerTest:
             raise ValueError("Incorrect syntax.")
 
     def state12(self, char, output):
+        """
+        Here we read the parameters for the function call. Arguments are pushed onto the stack so they can be used
+        within the function's stack frame. The stack pointer "S" always points to the top of the stack, so we can
+        determine the location of pushed arguments based on that offset. The register "S2" will be used to point to the
+        bottom of the stack frame, meaning the first argument pushed before the function call.
+        :param char: token from line being read. Once we read our argument, we jump to state 13. If we read a closing
+        parentheses, jump to state 15.
+        :param output: output file to write to.
+        :return:
+        """
+
         if char in self.varList:
+            # variable is in the local list
             output.write("    PUSH #" + str(self.varLocation[char]) + "\n")
             self.state = 13
             self.argCount += 1
+
         elif char in self.methodList[self.currentMethod]:
+            # variable is passed into the function as an argument
             output.write("    MOV $A2 $S2\n")
             output.write("    ADD #" + str(self.methodList[self.currentMethod][char][1] * 4) + " $A2\n")
             output.write("    PUSH $A2\n")
             self.state = 13
             self.argCount += 1
+
         elif char == ")":
+            # we're done verifying for arguments within the function call
             self.state = 15
 
     def state13(self, char, output):
+        """
+        This state simply checks if there are more arguments to read, or if we're done. A comma indicates there are more
+        to read, so we jump to state 14. A closing parentheses means we're done, and we jump to state 15.
+        :param char: token from line being read.
+        :param output: output file to write to.
+        :return:
+        """
         if char == ",":
             self.state = 14
         elif char == ")":
             self.state = 15
 
     def state14(self, char, output):
+        """
+        Identical to state 12, but for organisational purposes, this state was necessary. The only difference is that at
+        this point in parsing, we should not be able to read a closing parentheses (following a comma, which would
+        look like this: c = add ( a , )". In all valid cases, we jump back to state 13.
+        :param char: token from line being read.
+        :param output: output file to write to.
+        :return:
+        """
+
         if char in self.varList:
+            # variable is in the local list
             output.write("    PUSH #" + str(self.varLocation[char]) + "\n")
             self.state = 13
             self.argCount += 1
+
         elif char in self.methodList[self.currentMethod]:
+            # variable is passed into the function as an argument
             output.write("    MOV $A2 $S2\n")
             output.write("    ADD #" + str(self.methodList[self.currentMethod][char][1] * 4) + " $A2\n")
             output.write("    PUSH $A\n")
@@ -407,38 +453,80 @@ class CompilerTest:
             self.state = 13
 
     def state15(self, char, output):
+        """
+        This state finalizes the function call. We write the CALL function to the .casm file, and we assign the returned
+        value to the appropriate variable (stored in register A). Once we're all done, we switch back to state 7
+        :param char: token from line being read.
+        :param output: output file to write to.
+        :return:
+        """
+
         if char == ";":
+            # We ensure the statement is ended with a semi-colon properly
+
             if self.functionCall == "":
+                # This is if the function is being called by itself on a line (no variable assignment)
+
                 if self.argCount == self.methodList[self.currentVariable]["totalVars"]:
                     output.write("    CALL " + self.currentVariable + "\n")
                     self.state = 7
                 else:
                     raise ValueError("Arguments don't match function parameters.")
+
             else:
+                # Here, a variable is assigned the output of a function call
+
                 if self.argCount == self.methodList[self.functionCall]["totalVars"]:
                     output.write("    CALL " + self.functionCall + "\n")
+
                     if self.currentVariable in self.varList:
+                        # variable is in the local list
                         output.write("    MEMW [4] $A #" + str(self.varLocation[self.currentVariable]) + "\n")
+
                     elif self.currentVariable in self.methodList[self.currentMethod]:
+                        # variable is passed into the function as an argument
                         output.write("    MOV $A2 $S2\n")
                         output.write("    ADD #" + str(self.methodList[self.currentMethod][char][1] * 4) + " $A2\n")
                         output.write("    MEMW [4] $A $A2\n")
                     self.state = 7
+
                 else:
                     raise ValueError("Arguments don't match function parameters.")
 
     def state16(self, char, output):
+        """
+        This state begins the process of evaluating a return statement. If we immediately read a semi-colon, there is
+        nothing else to do and we return to state 7. If we read anything else, we append it to the mathFormula string
+        to be evaluated.
+        :param char: token from line being read.
+        :param output: output file to write to.
+        :return:
+        """
+
         if char == ";":
             output.write("    RET\n")
             self.state = 7
+
         else:
             self.mathFormula += char
             self.argCount += 1
             self.state = 17
 
     def state17(self, char, output):
+        """
+        Similar to state 10, this state evaluates a mathematical function, but following a return statement. We append
+        each operand until we reach a semi-colon indicating the end of the expression. In this case, rather than
+        assigning the result to a variable, we write it to register A. This follows the calling conventions which ensure
+        the correct value is being returned. After a CALL function, any result will always be stored in register A.
+        Once finished, we return to state 7.
+        :param char: token from line being read.
+        :param output: output file to write to.
+        :return:
+        """
+
         if char == ";":
             if self.argCount == 1:
+                # We only have one operand, no need to use the math parser
                 if self.mathFormula in self.varList:
                     output.write("    MEMR [4] #" + str(self.varLocation[self.mathFormula]) + " $A\n")
                 elif self.mathFormula in self.methodList[self.currentMethod]:
@@ -450,6 +538,7 @@ class CompilerTest:
                     output.write("    MOV #" + self.mathFormula + " $A\n")
 
             else:
+                # We make use of the math parser to write the appropriate Capua ASM output
                 tokens = tokenize(self.mathFormula)
                 postfix = infixToPostfix(tokens)
                 evaluatePostfix(postfix, self.varList, self.varLocation,
@@ -457,6 +546,8 @@ class CompilerTest:
 
             output.write("    RET\n")
             self.state = 7
+
         else:
+            # We have more operands to read, so we append them to the math formula string
             self.mathFormula += str(char)
             self.argCount += 1
