@@ -24,3 +24,15 @@ int main ( ) {
 ```
 
 It's a very noobish approach, but it works for now. Any suggestions are welcome. 
+
+## Mathematical expression parsing
+
+The compiler will make use of a simple infix/postfix algorithm to evaluate mathematical
+expressions. It only supports integer operations, and variables/integers as operands. It does not
+currently accept function calls within an expression.
+
+**infix : a * 4 + ( b / 5) * 2 + 4 **
+
+**postfix : a 4 * b 5 / 2 * + 4 + **
+
+The postfix notation is easier to evaluate, and can be converted to Capua ASM code using a stack. 
