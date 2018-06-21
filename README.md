@@ -31,8 +31,8 @@ The compiler will make use of a simple infix/postfix algorithm to evaluate mathe
 expressions. It only supports integer operations, and variables/integers as operands. It does not
 currently accept function calls within an expression.
 
-**infix : a * 4 + ( b / 5) * 2 + 4 **
+__infix : a * 4 + ( b / 5) * 2 + 4__
 
-**postfix : a 4 * b 5 / 2 * + 4 + **
+__postfix : a 4 * b 5 / 2 * + 4 +__
 
 The postfix notation is easier to evaluate, and can be converted to Capua ASM code using a stack. 
