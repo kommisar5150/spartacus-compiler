@@ -1,5 +1,4 @@
-# Spartacus Compiler
-C compiler for Capua ASM conversion
+## C compiler for Capua ASM conversion
 
 I know very little about compilers, so I'm just designing this the way it makes sense in my head. 
 Current functionality for the compiler will be limited to the following options:
