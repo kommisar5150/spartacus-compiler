@@ -3,7 +3,8 @@
 # TODO: if statements
 # TODO: while loops
 
-from constants import ACCEPTED_TYPES
+from constants import ACCEPTED_TYPES, \
+                      BOOLEAN_OPERATORS
 
 from mathParser import tokenize, \
                        infixToPostfix, \
@@ -11,20 +12,29 @@ from mathParser import tokenize, \
 
 class CompilerTest:
     """
-    Beta for a C compiler which converts C code to Capua ASM.
+    Beta for a C compiler which converts C code to Capua ASM. The compiler makes use of the cdecl calling convention,
+    often used by C compilers for the x86 architecture. This convention stipulates that "subroutine arguments are passed
+    on the stack. Integer values and memory addresses are returned in the EAX register". In our case, contrary to cdecl,
+    arguments will be pushed onto the stack from left to right, meaning the first argument gets pushed first. Integer
+    values and memory addresses are returned to the "A" register for this Capua ASM compiler.
     """
 
     state = 0                     # This determines which state the compiler is in. Each state has specific instructions
     mathFormula = ""              # Will contain our fully assembled math expressions for variable assignments
-    memoryLocation = 0x40000000   # Memory location for local variables. TODO: free memory when function call is done
+    memoryLocation = 0x40000000   # Memory location for local variables.
     varList = []                  # Contains a list of variable names
     varLocation = {}              # Contains the memory location for all variables
     methodList = {}               # List of methods, along with their return type, variables (and types), and # of args
     currentMethod = ""            # Keeps track of which method we're currently in
     argCount = 0                  # Used for number of operands in math expression, args in function calls, etc.
+    variableCount = 0             # Number of variables declared in current function.
     currentType = ""              # Current data type of variable or function to be evaluated
     currentVariable = ""          # Current variable or function being evaluated
-    functionCall = ""
+    functionCall = ""             # Name of the function we're calling when doing variable assignment
+    whileFlag = 0                 # Lets the compiler know if we're in a while loop
+    ifOperator = ""               # Holds the logical operator between two sides of an if boolean expression
+    ifFlag = 0                    # Lets the compiler know if we're in an if statement
+    ifLabel = 0                   # For jump instructions, we need a unique label for every if statement
 
 
     def parseText(self, text):
@@ -40,6 +50,8 @@ class CompilerTest:
         for x in lines:
             self.readLine(x, output)
 
+        if self.ifFlag > -1:
+            raise ValueError("Missing closing curly brace after If statement.")
         output.write("end:\n")
         file.close()
         output.close()
@@ -111,6 +123,18 @@ class CompilerTest:
             elif self.state == 17:
                 self.state17(char, output)
 
+            elif self.state == 18:
+                self.state18(char, output)
+
+            elif self.state == 19:
+                self.state19(char, output)
+
+            elif self.state == 20:
+                self.state20(char, output)
+
+            elif self.state == 21:
+                self.state21(char, output)
+
     def state0(self, char, output):
         """
         Initial state before method return type declaration. Here we determine if the return type is valid. If so,
@@ -122,6 +146,7 @@ class CompilerTest:
         if self.state == 0:
             self.varList.clear()
             self.varLocation.clear()
+            self.variableCount = 0
             if char in ACCEPTED_TYPES:
                 self.currentType = char
                 self.state = 1
@@ -215,7 +240,7 @@ class CompilerTest:
             self.state = 7
             self.varList.clear()
             if self.argCount > 0:
-                output.write("    MOV $S2 $S\n")
+                output.write("    MOV $S $S2\n")
                 output.write("    SUB #" + str(self.argCount * 4 + 4) + " $S2\n")
         else:
             raise ValueError("Incorrect syntax.")
@@ -253,10 +278,21 @@ class CompilerTest:
             self.state = 9
 
         elif char == "}":
-            self.state = 0
+
+            if self.ifFlag > 0:
+                output.write("endif" + str(self.ifLabel-1) + ":\n")
+                self.ifFlag -= 1
+
+            else:
+                self.state = 0
+                self.ifFlag -= 1
 
         elif char == "return":
             self.state = 16
+
+        elif char == "if":
+            self.ifFlag += 1
+            self.state = 18
 
     def state8(self, char, output):
         """
@@ -271,6 +307,7 @@ class CompilerTest:
         self.varList.append(char)
         self.varLocation[char] = self.memoryLocation
         self.memoryLocation += 4
+        self.variableCount += 1
         self.currentVariable = char
         self.state = 9
 
@@ -495,8 +532,9 @@ class CompilerTest:
 
     def state16(self, char, output):
         """
-        This state begins the process of evaluating a return statement. If we immediately read a semi-colon, there is
-        nothing else to do and we return to state 7. If we read anything else, we append it to the mathFormula string
+        This state begins the process of evaluating a return statement. If we immediately read a semi-colon, we free up
+         the memory used by variables pushed onto the stack and we return to state 7. If we read anything else, we
+         append it to the mathFormula string.
         to be evaluated.
         :param char: token from line being read.
         :param output: output file to write to.
@@ -504,6 +542,9 @@ class CompilerTest:
         """
 
         if char == ";":
+            # Free up the memory used by variable declarations during this stack frame, then return
+            self.memoryLocation -= self.variableCount * 4
+            output.write("    SUB #" + str(self.variableCount * 4) + " $S\n")
             output.write("    RET\n")
             self.state = 7
 
@@ -516,9 +557,9 @@ class CompilerTest:
         """
         Similar to state 10, this state evaluates a mathematical function, but following a return statement. We append
         each operand until we reach a semi-colon indicating the end of the expression. In this case, rather than
-        assigning the result to a variable, we write it to register A. This follows the calling conventions which ensure
-        the correct value is being returned. After a CALL function, any result will always be stored in register A.
-        Once finished, we return to state 7.
+        assigning the result to a variable, we write it to register A. This follows the cdecl calling conventions which
+        ensures the correct value is being returned. After a CALL function, any result will always be stored in register
+        A. Once finished, we free up the memory used by pushed variables for the stack frame, and we return to state 7.
         :param char: token from line being read.
         :param output: output file to write to.
         :return:
@@ -544,6 +585,9 @@ class CompilerTest:
                 evaluatePostfix(postfix, self.varList, self.varLocation,
                                 self.methodList[self.currentMethod], output)
 
+            # Free up the memory used by variable declarations during this stack frame, then return
+            self.memoryLocation -= self.variableCount * 4
+            output.write("    SUB #" + str(self.variableCount * 4) + " $S\n")
             output.write("    RET\n")
             self.state = 7
 
@@ -551,3 +595,136 @@ class CompilerTest:
             # We have more operands to read, so we append them to the math formula string
             self.mathFormula += str(char)
             self.argCount += 1
+
+    def state18(self, char, output):
+        """
+        Reads an opening parentheses for an if statement. If successful, we jump to state 19.
+        :param char: token from line being read.
+        :param output: output file to write to.
+        :return:
+        :return:
+        """
+
+        if char == "(":
+            self.state = 19
+        else:
+            raise ValueError("Incorrect syntax.")
+
+    def state19(self, char, output):
+        """
+        Begins the evaluation of the left hand side for if boolean statement.
+        :param char: token from line being read.
+        :param output: output file to write to.
+        :return:
+        :return:
+        """
+
+        if char in BOOLEAN_OPERATORS:
+            self.ifOperator = char
+
+            if self.argCount == 1:
+                # We only have one operand, so there's no need to pass the expression through the math parser.
+
+                if self.mathFormula in self.varList:
+                    # The operand is a variable from the local list. We read its value and write it to the variable
+                    output.write("    MEMR [4] #" + str(self.varLocation[self.mathFormula]) + " $A2\n")
+
+                elif self.mathFormula in self.methodList[self.currentMethod]:
+                    # The operand is one of the function's arguments. We use the stack pointer to locate its memory
+                    # location (we assume it was pushed onto the stack during function call), then we read its value
+                    # before writing it to the variable.
+                    output.write("    MOV $C2 $S2\n")
+                    output.write("    ADD #" + str(self.methodList[self.currentMethod][self.mathFormula][1] * 4)
+                                 + " $B2\n")
+                    output.write("    MEMR [4] $C2 $A2\n")
+
+                else:
+                    # The operand is simply an immediate value (integer). We can move it to a register and write to the
+                    # appropriate memory location.
+                    output.write("    MOV #" + self.mathFormula + " $A2\n")
+
+            else:
+                tokens = tokenize(self.mathFormula)
+                postfix = infixToPostfix(tokens)
+                evaluatePostfix(postfix, self.varList, self.varLocation, self.methodList[self.currentMethod], output)
+                output.write("    MEMW [4] $A $A2\n")
+
+            self.mathFormula = ""
+            self.argCount = 0
+            self.state = 20
+
+        else:
+            self.mathFormula += char
+            self.argCount += 1
+
+    def state20(self, char, output):
+        """
+        Begins the evaluation of the right hand side for if boolean statement.
+        :param char: token from line being read.
+        :param output: output file to write to.
+        :return:
+        """
+
+        if char == ")":
+            if self.argCount == 1:
+                # We only have one operand, so there's no need to pass the expression through the math parser.
+
+                if self.mathFormula in self.varList:
+                    # The operand is a variable from the local list. We read its value and write it to the variable
+                    output.write("    MEMR [4] #" + str(self.varLocation[self.mathFormula]) + " $B2\n")
+
+                elif self.mathFormula in self.methodList[self.currentMethod]:
+                    # The operand is one of the function's arguments. We use the stack pointer to locate its memory
+                    # location (we assume it was pushed onto the stack during function call), then we read its value
+                    # before writing it to the variable.
+                    output.write("    MOV $C2 $S2\n")
+                    output.write("    ADD #" + str(self.methodList[self.currentMethod][self.mathFormula][1] * 4)
+                                 + " $B2\n")
+                    output.write("    MEMR [4] $C2 $B2\n")
+
+                else:
+                    # The operand is simply an immediate value (integer). We can move it to a register and write to the
+                    # appropriate memory location.
+                    output.write("    MOV #" + self.mathFormula + " $B2\n")
+
+            else:
+                tokens = tokenize(self.mathFormula)
+                postfix = infixToPostfix(tokens)
+                evaluatePostfix(postfix, self.varList, self.varLocation, self.methodList[self.currentMethod], output)
+                output.write("    MEMW [4] $A $B2\n")
+
+            self.state = 21
+        else:
+            self.mathFormula += char
+            self.argCount += 1
+
+    def state21(self, char, output):
+        """
+        Determines which jump statement is appropriate based on the operator for the if boolean expression.
+        :param char: token from line being read.
+        :param output: output file to write to.
+        :return:
+        """
+
+        if char == "{":
+
+            if self.ifOperator == "<":
+                flag = "<HE>"
+            elif self.ifOperator == "<=":
+                flag = "<H>"
+            elif self.ifOperator == "=":
+                flag = "<LH>"
+            elif self.ifOperator == ">":
+                flag = "<LE>"
+            elif self.ifOperator == ">=":
+                flag = "<L>"
+            else:
+                raise ValueError("Incorrect operator for if statement.")
+
+            output.write("    CMP $B2 $A2\n")
+            output.write("    JMP " + flag + " endif" + str(self.ifLabel) + "\n")
+            self.ifLabel += 1
+            self.state = 7
+
+        else:
+            raise ValueError("Syntax error.")

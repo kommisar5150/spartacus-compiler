@@ -1,0 +1,24 @@
+main:
+    MOV end $S
+    MOV #5 $A
+    MEMW [4] $A #1073741824
+    MOV #6 $A
+    MEMW [4] $A #1073741828
+    MEMR [4] #1073741824 $A2
+    MOV #6 $B2
+    CMP $B2 $A2
+    JMP <HE> endif0
+    MOV #10 $A
+    MEMW [4] $A #1073741824
+endif0:
+    MEMR [4] #1073741824 $A2
+    MEMR [4] #1073741828 $B2
+    CMP $B2 $A2
+    JMP <LE> endif1
+    MOV #3 $A
+    MEMW [4] $A #1073741824
+endif1:
+    MEMR [4] #1073741824 $A
+    SUB #8 $S
+    RET
+end:

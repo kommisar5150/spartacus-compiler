@@ -4,6 +4,7 @@ import re
 
 ACCEPTED_TYPES = ["int", "void", "char"]
 OPERATORS = ['+', '-', '*', '/']
+BOOLEAN_OPERATORS = ["<", ">", "="]
 REGISTERS = {
     0: "A",
     1: "B",
