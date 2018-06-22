@@ -35,7 +35,7 @@ class CompilerTest:
         """
         file = open(text, mode="r")
         lines = file.readlines()
-        output = open("output.txt", mode="w")
+        output = open("output.casm", mode="w")
 
         for x in lines:
             self.readLine(x, output)
