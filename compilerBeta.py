@@ -33,9 +33,9 @@ class CompilerTest:
     functionCall = ""             # Name of the function we're calling when doing variable assignment
     whileFlag = 0                 # Lets the compiler know if we're in a while loop
     ifOperator = ""               # Holds the logical operator between two sides of an if boolean expression
-    ifFlag = 0                    # Lets the compiler know if we're in an if statement
+    nestedFlag = 0                # Lets the compiler know if we're in an if statement
     ifLabel = 0                   # For jump instructions, we need a unique label for every if statement
-
+    lineno = 0                    # Line number for printing error messages
 
     def parseText(self, text):
         """
@@ -43,18 +43,27 @@ class CompilerTest:
         :param text: str, name of file to read from
         :return:
         """
-        file = open(text, mode="r")
-        lines = file.readlines()
-        output = open("output.casm", mode="w")
+
+        try:
+            file = open(text, mode="r")
+            lines = file.readlines()
+        except OSError as e:
+            raise OSError("Couldn't open file {}".format(text))
+        try:
+            output = open("output.casm", mode="w")
+        except OSError as e:
+            raise OSError("Couldn't open file {}".format(text))
 
         for x in lines:
             self.readLine(x, output)
 
-        if self.ifFlag > -1:
-            raise ValueError("Missing closing curly brace after If statement.")
         output.write("end:\n")
-        file.close()
-        output.close()
+
+        try:
+            file.close()
+            output.close()
+        except OSError as e:
+            raise OSError("Couldn't close file.")
 
     def readLine(self, line, output):
         """
@@ -66,6 +75,7 @@ class CompilerTest:
         :return:
         """
 
+        self.lineno += 1
         line = line.split()
         for char in line:
 
@@ -151,7 +161,8 @@ class CompilerTest:
                 self.currentType = char
                 self.state = 1
             else:
-                raise ValueError("incorrect data return type for method declaration.")
+                print(char)
+                raise ValueError("incorrect data return type for method declaration at line {}.".format(self.lineno))
 
     def state1(self, char, output):
         """
@@ -279,20 +290,31 @@ class CompilerTest:
 
         elif char == "}":
 
-            if self.ifFlag > 0:
+            if self.nestedFlag > 0:
+                if self.whileFlag == 1:
+                    output.write("    JMP <> loop" + str(self.ifLabel-1) + "\n")
+                    self.whileFlag = 0
                 output.write("endif" + str(self.ifLabel-1) + ":\n")
-                self.ifFlag -= 1
+                self.nestedFlag -= 1
 
             else:
                 self.state = 0
-                self.ifFlag -= 1
 
         elif char == "return":
             self.state = 16
 
         elif char == "if":
-            self.ifFlag += 1
+            self.nestedFlag += 1
             self.state = 18
+
+        elif char == "while":
+            self.nestedFlag += 1
+            self.whileFlag = 1
+            output.write("loop" + str(self.ifLabel) + ":\n")
+            self.state = 18
+
+        else:
+            raise ValueError("Incorrect syntax.")
 
     def state8(self, char, output):
         """
@@ -325,6 +347,8 @@ class CompilerTest:
             self.state = 10
         elif char == ";":
             self.state = 7
+        else:
+            raise ValueError("Incorrect syntax.")
 
     def state10(self, char, output):
         """
@@ -452,6 +476,9 @@ class CompilerTest:
             # we're done verifying for arguments within the function call
             self.state = 15
 
+        else:
+            raise ValueError("Incorrect syntax.")
+
     def state13(self, char, output):
         """
         This state simply checks if there are more arguments to read, or if we're done. A comma indicates there are more
@@ -464,12 +491,15 @@ class CompilerTest:
             self.state = 14
         elif char == ")":
             self.state = 15
+        else:
+            raise ValueError("Incorrect syntax.")
 
     def state14(self, char, output):
         """
         Identical to state 12, but for organisational purposes, this state was necessary. The only difference is that at
         this point in parsing, we should not be able to read a closing parentheses (following a comma, which would
-        look like this: c = add ( a , )". In all valid cases, we jump back to state 13.
+        look like this: c = add ( a , )". In all valid cases, we jump back to state 13. Currently, function calls only
+        accept variables as arguments. Thus, we can't pass in immediate values into a function.
         :param char: token from line being read.
         :param output: output file to write to.
         :return:
@@ -488,6 +518,9 @@ class CompilerTest:
             output.write("    PUSH $A\n")
             self.argCount += 1
             self.state = 13
+
+        else:
+            raise ValueError("Incorrect syntax.")
 
     def state15(self, char, output):
         """
@@ -529,6 +562,9 @@ class CompilerTest:
 
                 else:
                     raise ValueError("Arguments don't match function parameters.")
+
+        else:
+            raise ValueError("Incorrect syntax.")
 
     def state16(self, char, output):
         """
@@ -728,3 +764,4 @@ class CompilerTest:
 
         else:
             raise ValueError("Syntax error.")
+

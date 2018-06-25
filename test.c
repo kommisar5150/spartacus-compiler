@@ -1,11 +1,15 @@
+int add ( int a , int b ) {
+    return a + b ;
+}
+
 int main ( ) {
     int a = 5 ;
-    int b = 6 ;
-    if ( a < 6 ) {
-        a = 10 ;
+    while ( a > 4 ) {
+        a = a - 1 ;
     }
-    if ( a > b ) {
-        a = 3 ;
+    if ( a = 4 ) {
+        int b = 4 ;
     }
-    return a ;
+    int c = add ( a , b ) ;
+    return 4 + 5 + a ;
 }

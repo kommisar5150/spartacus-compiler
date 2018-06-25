@@ -1,24 +1,44 @@
+add:
+    MOV $S $S2
+    SUB #12 $S2
+    MOV $A2 $S2
+    ADD #4 $A2
+    MEMR [4] $A2 $B
+    MOV $B2 $S2
+    ADD #0 $B2
+    MEMR [4] $B2 $A
+    ADD $B $A
+    SUB #0 $S
+    RET
 main:
     MOV end $S
     MOV #5 $A
     MEMW [4] $A #1073741824
-    MOV #6 $A
-    MEMW [4] $A #1073741828
+loop0:
     MEMR [4] #1073741824 $A2
-    MOV #6 $B2
+    MOV #4 $B2
     CMP $B2 $A2
-    JMP <HE> endif0
-    MOV #10 $A
+    JMP <LE> endif0
+    MEMR [4] #1073741824 $A
+    MOV #1 $B
+    SUB $B $A
     MEMW [4] $A #1073741824
+    JMP <> loop0
 endif0:
     MEMR [4] #1073741824 $A2
-    MEMR [4] #1073741828 $B2
+    MOV #4 $B2
     CMP $B2 $A2
-    JMP <LE> endif1
-    MOV #3 $A
-    MEMW [4] $A #1073741824
+    JMP <LH> endif1
+    MOV #4 $A
+    MEMW [4] $A #1073741828
 endif1:
-    MEMR [4] #1073741824 $A
-    SUB #8 $S
+    PUSH #1073741824
+    PUSH #1073741828
+    CALL add
+    MEMW [4] $A #1073741832
+    MEMR [4] #1073741824 $B
+    MOV #9 $A
+    ADD $B $A
+    SUB #12 $S
     RET
 end:
