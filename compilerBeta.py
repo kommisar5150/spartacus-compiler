@@ -1,8 +1,5 @@
 #!/usr/bin/env python
 
-# TODO: if statements
-# TODO: while loops
-
 from constants import ACCEPTED_TYPES, \
                       BOOLEAN_OPERATORS
 
