@@ -4,13 +4,14 @@ add:
     RET
 main:
     MOV end $S
-    MOV #23 $A
+    MOV #4 $A
+    MOV $A $C2
+    MOV #5 $A
+    MOV $A $D2
+    CMP $D2 $C2
+    JMP <LE> L0
+    MOV #4 $A
     MEMW [4] $A #1073741824
-    MOV #3 $A
-    MEMW [4] $A #1073741828
-    PUSH #1073741824
-    PUSH #1073741828
-    CALL add
-    SUB #12 $S
+L0:
     RET
 end:

@@ -1,7 +1,9 @@
 #!/usr/bin/env python
 
 from constants import ACCEPTED_TYPES, \
-                      IGNORE_CHARS
+                      IGNORE_CHARS, \
+                      BOOLEAN_OPERATORS
+
 from mathParser import tokenize, \
                        infixToPostfix, \
                        evaluatePostfix
@@ -32,7 +34,24 @@ class Compiler:
     lineno = 0                   # Line number for printing error messages
     functionArg = ""             # Used to read a function call's arguments
 
-    def parseText(self, text):
+    def __init__(self, inputFile=None, outputFile=None):
+        """
+        This allows for simple initialisation of the Compiler. It will spawn the required
+        parser that will parse the assembly code into binary format. It will then call
+        buildAssembledFile so that the final file can be created.
+        :return:
+        """
+
+        if type(inputFile) is not str or len(inputFile) is 0:
+            # File is invalid
+            raise ValueError("Assembler error - Invalid input file selected")
+        if type(outputFile) is not str or len(outputFile) is 0:
+            # File is invalid
+            raise ValueError("Assembler error - Invalid output file selected")
+
+        self.parseText(inputFile, outputFile)
+
+    def parseText(self, inputFile, outputFile):
         """
         Initializes parsing process. Opens the input file to read from, and initializes the output file we will create.
         :param text: str, name of file to read from
@@ -40,14 +59,14 @@ class Compiler:
         """
 
         try:
-            file = open(text, mode="r")
+            file = open(inputFile, mode="r")
             inputFile = file.readlines()
         except OSError as e:
-            raise OSError("Couldn't open file {}".format(text))
+            raise OSError("Couldn't open file {}".format(inputFile))
         try:
-            output = open("output.casm", mode="w")
+            output = open(outputFile, mode="w")
         except OSError as e:
-            raise OSError("Couldn't open file {}".format(text))
+            raise OSError("Couldn't open file {}".format(outputFile))
 
         for line in inputFile:
             self.lineno += 1
@@ -89,6 +108,9 @@ class Compiler:
 
         elif self.state == 8:
             self.state8(char, output)
+
+        elif self.state == 9:
+            self.state9(char, output)
 
     def state0(self, char, output):
 
@@ -291,7 +313,9 @@ class Compiler:
 
         elif char == " " and self.expectFlag == 1:
             if self.identifier == "if":
-                pass
+                self.state = 9
+                self.identifier = ""
+                self.expectFlag = 0
             elif self.identifier == "while":
                 pass
             elif self.identifier == "return":
@@ -312,6 +336,7 @@ class Compiler:
                 self.functionCall = self.identifier
                 self.identifier = ""
             else:
+                print(self.identifier)
                 raise ValueError("Error at line {}".format(self.lineno))
 
         elif char == "=" and self.expectFlag == 1:
@@ -324,7 +349,9 @@ class Compiler:
                 self.identifier = ""
 
             elif self.identifier == "if":
-                pass
+                self.state = 9
+                self.identifier = ""
+
             elif self.identifier == "while":
                 pass
             elif self.identifier == "return":
@@ -345,6 +372,7 @@ class Compiler:
                 self.varLocation.clear()
             else:
                 self.nestedFlag -= 1
+                output.write("L" + str(self.ifLabel-1) + ":\n")
 
 
         else:
@@ -425,14 +453,14 @@ class Compiler:
         elif char == "(" and self.expectFlag == 1:
             if self.mathFormula in self.methodList:
                 self.functionCall = self.mathFormula
-                self.state = 10
+                self.state = 8
             else:
                 self.mathFormula += char
 
         elif char == " " and self.expectFlag == 1:
             if self.mathFormula in self.methodList:
                 self.functionCall = self.mathFormula
-                self.state = 10
+                self.state = 8
             else:
                 self.mathFormula += char
 
@@ -543,10 +571,61 @@ class Compiler:
                 self.state = 5
                 if self.currentVar != "":
                     output.write("    MEMW [4] $A #" + self.varLocation[self.currentVar] + "\n")
+                output.write("    SUB #" + str(self.argCount * 4) + " $S\n")
                 self.functionCall = ""
                 self.functionArg = ""
                 self.argCount = 0
-                output.write("    SUB #" + str(self.variableCount * 4) + " $S\n")
+
+    def state9(self, char, output):
+        """
+        This state will deal with if statements. We begin by evaluating the left hand side and placing the result in
+        register C2. Then we evaluate the right hand side and place in register D2.
+        :param char:
+        :param output:
+        :return:
+        """
+
+        if char in IGNORE_CHARS and self.expectFlag == 0:
+            pass
+        elif char == "(" and self.expectFlag == 0:
+            self.expectFlag = 1
+        elif self.expectFlag == 1:
+            if char in BOOLEAN_OPERATORS:
+                tokens = tokenize(self.mathFormula)
+                postfix = infixToPostfix(tokens)
+                evaluatePostfix(postfix, self.varList, self.varLocation, self.methodList[self.currentMethod], output)
+                self.ifOperator = self.convertOperatorToFlags(char)
+                self.expectFlag = 2
+                self.mathFormula = ""
+                output.write("    MOV $A $C2\n")
+            else:
+                self.mathFormula += char
+
+        elif self.expectFlag == 2:
+            if char == ")":
+                tokens = tokenize(self.mathFormula)
+                postfix = infixToPostfix(tokens)
+                evaluatePostfix(postfix, self.varList, self.varLocation, self.methodList[self.currentMethod], output)
+                self.expectFlag = 2
+                self.mathFormula = ""
+                output.write("    MOV $A $D2\n")
+                self.expectFlag = 3
+            else:
+                self.mathFormula += char
+        elif self.expectFlag == 3:
+            if char in IGNORE_CHARS:
+                pass
+            elif char == "{":
+                output.write("    CMP $D2 $C2\n")
+                output.write("    JMP " + self.ifOperator + " L" + str(self.ifLabel) + "\n")
+                self.ifLabel += 1
+                self.nestedFlag += 1
+                self.state = 5
+                self.expectFlag = 0
+                self.mathFormula = ""
+            else:
+                print(char)
+                raise ValueError("Syntax error at line {}".format(self.lineno))
 
     def validName(self, name):
         """
@@ -588,3 +667,25 @@ class Compiler:
         self.argCount += 1
         self.currentType = ""
         self.currentVar = ""
+
+    def convertOperatorToFlags(self, char):
+        """
+        This converts an operator to the appropriate flags for a JMP instruction
+        :param char:
+        :return:
+        """
+
+        if char == "<":
+            flag = "<HE>"
+        elif char == "<=":
+            flag = "<H>"
+        elif char == "=":
+            flag = "<LH>"
+        elif char == ">":
+            flag = "<LE>"
+        elif char == ">=":
+            flag = "<L>"
+        else:
+            raise ValueError("Incorrect operator for if statement.")
+
+        return flag

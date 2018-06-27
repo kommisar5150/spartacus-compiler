@@ -45,3 +45,6 @@ TOKEN_SEPARATOR = re.compile(r'\s*(%s|%s|%s|%s|%s|%s)\s*' % (
                   re.escape(MINUS),
                   re.escape(MULTIPLICATION),
                   re.escape(DIVISION)))
+
+UNDEFINED = "&&undefined&&"
+DEFAULT_OUTPUT_EXTENSION = ".casm"
