@@ -5,6 +5,7 @@ import re
 ACCEPTED_TYPES = ["int", "void", "char"]
 OPERATORS = ['+', '-', '*', '/']
 BOOLEAN_OPERATORS = ["<", ">", "="]
+IGNORE_CHARS = [" ", "\n"]
 REGISTERS = {
     0: "A",
     1: "B",

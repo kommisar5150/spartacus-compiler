@@ -1,11 +1,11 @@
 #!/usr/bin/env python
 
-from compilerBeta import CompilerTest
+from compiler import Compiler
 
 
 def main():
-    compiler = CompilerTest()
-    compiler.parseText("test.c")
+    comp = Compiler()
+    comp.parseText("test.c")
 
 
 if __name__ == '__main__':
